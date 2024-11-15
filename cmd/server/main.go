@@ -23,12 +23,17 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Server successfully connected to RabbitMQ")
 
-	_, _, err = pubsub.DeclareAndBind(
+	err = pubsub.SubscribeGob(
 		conn,
 		routing.ExchangePerilTopic,
 		routing.GameLogSlug,
 		fmt.Sprintf("%v.*", routing.GameLogSlug),
 		0,
+		func(gl routing.GameLog) routing.AckType {
+			defer fmt.Print("> ")
+			gamelogic.WriteLog(gl)
+			return routing.ACK
+		},
 	)
 
 	if err != nil {

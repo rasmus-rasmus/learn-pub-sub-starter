@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/cmd/client/client"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
@@ -50,13 +52,28 @@ func main() {
 		log.Fatalf("%v failed to subscribe to pause queue. Error: %v", userName, err)
 	}
 
+	// Subscribe to move
 	err = pubsub.SubscribeJSON(
 		conn,
 		routing.ExchangePerilTopic,
-		fmt.Sprintf("%v, %v", routing.ArmyMovesPrefix, userName),
+		fmt.Sprintf("%v.%v", routing.ArmyMovesPrefix, userName),
 		fmt.Sprintf("%v.*", routing.ArmyMovesPrefix),
 		1,
-		client.HandlerMove(gameState),
+		client.HandlerMove(gameState, ch),
+	)
+
+	if err != nil {
+		log.Fatalf("%v failed to subscribe to move queue. Error: %v", userName, err)
+	}
+
+	//Subscribe to war
+	err = pubsub.SubscribeJSON(
+		conn,
+		routing.ExchangePerilTopic,
+		routing.WarRecognitionsPrefix,
+		fmt.Sprintf("%v.*", routing.WarRecognitionsPrefix),
+		0,
+		client.HandlerWar(gameState, ch),
 	)
 
 	if err != nil {
@@ -84,6 +101,7 @@ func main() {
 				move, err := gameState.CommandMove(input)
 				if err != nil {
 					fmt.Printf("Operation failed: %v\n", err)
+					break
 				}
 				err = pubsub.PublishJSON(
 					ch,
@@ -109,7 +127,34 @@ func main() {
 			}
 		case "spam":
 			{
-				fmt.Println("Spamming not allowed yet.")
+				if len(input) < 2 {
+					fmt.Println("Please provide a spam number")
+					break
+				}
+				numSpam, err := strconv.Atoi(input[1])
+				if err != nil || numSpam <= 0 {
+					fmt.Println("Please provide a positive integer")
+					break
+				}
+
+				fmt.Printf("Spamming %v times\n", numSpam)
+
+				for i := 0; i < numSpam; i++ {
+					mallog := gamelogic.GetMaliciousLog()
+					err = pubsub.PublishGob(
+						ch,
+						routing.ExchangePerilTopic,
+						routing.GameLogSlug+"."+userName,
+						routing.GameLog{
+							CurrentTime: time.Now(),
+							Message:     mallog,
+							Username:    userName,
+						},
+					)
+					if err != nil {
+						fmt.Printf("Spamming failed. Error %v", err)
+					}
+				}
 				break
 			}
 		case "quit":
